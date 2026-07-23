@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Installs the knowledgebase MCP server and UserPromptSubmit hook into
-# ~/.claude/settings.json (follows symlinks). Safe to re-run.
+# Installs the knowledgebase MCP server, UserPromptSubmit hook, and Stop hook
+# into ~/.claude/settings.json (follows symlinks). Safe to re-run.
 set -e
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,18 +47,22 @@ repo_dir      = sys.argv[2]
 
 settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
 
-hook_cmd = f"{repo_dir}/hooks/user_prompt_submit.sh"
 hooks = settings.setdefault("hooks", {})
-submit_hooks = hooks.setdefault("UserPromptSubmit", [])
 
-# Remove any stale knowledgebase hook entry, then re-add
-submit_hooks[:] = [h for h in submit_hooks if hook_cmd not in str(h)]
-submit_hooks.append({
-    "hooks": [{"type": "command", "command": hook_cmd}]
-})
+def register_hook(hooks, event, cmd):
+    entries = hooks.setdefault(event, [])
+    entries[:] = [h for h in entries if cmd not in str(h)]
+    entries.append({"hooks": [{"type": "command", "command": cmd}]})
+
+submit_cmd = f"{repo_dir}/hooks/user_prompt_submit.sh"
+stop_cmd   = f"{repo_dir}/hooks/stop.sh"
+
+register_hook(hooks, "UserPromptSubmit", submit_cmd)
+register_hook(hooks, "Stop", stop_cmd)
 
 settings_path.write_text(json.dumps(settings, indent=2) + "\n")
-print(f"  UserPromptSubmit hook     → {hook_cmd}")
+print(f"  UserPromptSubmit hook     → {submit_cmd}")
+print(f"  Stop hook                 → {stop_cmd}")
 PYEOF
 
 echo "==> knowledgebase: install complete."
