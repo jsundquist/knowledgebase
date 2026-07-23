@@ -5,10 +5,10 @@ set -e
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENV="$REPO_DIR/.venv"
-# MCP server paths go into settings.local.json (machine-specific, not committed)
+# MCP server paths go into ~/.claude.json (Claude Code's primary config file)
 # The UserPromptSubmit hook goes into settings.json (committed) since the hook
 # script itself resolves its own absolute path at runtime via $BASH_SOURCE.
-SETTINGS_LOCAL="$HOME/.claude/settings.local.json"
+CLAUDE_JSON="$HOME/.claude.json"
 SETTINGS_GLOBAL="$(python3 -c "import os; print(os.path.realpath(os.path.expanduser('~/.claude/settings.json')))")"
 
 echo "==> knowledgebase: setting up Python venv..."
@@ -18,8 +18,8 @@ if ! command -v uv &>/dev/null; then
 fi
 uv sync --quiet
 
-echo "==> knowledgebase: patching $SETTINGS_LOCAL (MCP server)..."
-python3 - "$SETTINGS_LOCAL" "$REPO_DIR" "$VENV" <<'PYEOF'
+echo "==> knowledgebase: patching $CLAUDE_JSON (MCP server)..."
+python3 - "$CLAUDE_JSON" "$REPO_DIR" "$VENV" <<'PYEOF'
 import json, sys, pathlib
 
 settings_path = pathlib.Path(sys.argv[1])
@@ -29,6 +29,7 @@ venv          = sys.argv[3]
 settings = json.loads(settings_path.read_text()) if settings_path.exists() else {}
 
 settings.setdefault("mcpServers", {})["knowledgebase"] = {
+    "type": "stdio",
     "command": f"{venv}/bin/python",
     "args": [f"{repo_dir}/src/server.py", "--quiet"],
     "env": {"PYTHONPATH": f"{repo_dir}/src"},
