@@ -1,0 +1,20 @@
+[project]
+name = "knowledgebase"
+version = "0.1.0"
+description = "MCP server for tracking key ideas, findings, and understanding per project"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0",
+    "mcp>=1.0",
+]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]

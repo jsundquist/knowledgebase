@@ -24,16 +24,6 @@ def search(db_path: str, project: str, query: str, limit: int = 8) -> list[dict]
             LIMIT ?
         """, (query, project, limit)).fetchall()
 
-        # If no project-scoped hits, try global (preferences, style rules, etc.)
-        if not rows:
-            rows = conn.execute("""
-                SELECT e.type, e.title, e.body, e.tags
-                FROM entries_fts
-                JOIN entries e ON entries_fts.rowid = e.id
-                ORDER BY rank
-                LIMIT ?
-            """, (limit,)).fetchall()
-
         return [dict(r) for r in rows]
     finally:
         conn.close()

@@ -12,9 +12,11 @@ SETTINGS_LOCAL="$HOME/.claude/settings.local.json"
 SETTINGS_GLOBAL="$(python3 -c "import os; print(os.path.realpath(os.path.expanduser('~/.claude/settings.json')))")"
 
 echo "==> knowledgebase: setting up Python venv..."
-python3 -m venv "$VENV"
-"$VENV/bin/pip" install --quiet --upgrade pip
-"$VENV/bin/pip" install --quiet mcp fastmcp
+if ! command -v uv &>/dev/null; then
+    echo "ERROR: 'uv' is not installed. Install it via Homebrew: brew install uv" >&2
+    exit 1
+fi
+uv sync --quiet
 
 echo "==> knowledgebase: patching $SETTINGS_LOCAL (MCP server)..."
 python3 - "$SETTINGS_LOCAL" "$REPO_DIR" "$VENV" <<'PYEOF'
