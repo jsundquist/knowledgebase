@@ -44,6 +44,11 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS entries_project ON entries(project_id);
             CREATE INDEX IF NOT EXISTS entries_type    ON entries(type);
 
+            CREATE TABLE IF NOT EXISTS hook_state (
+                transcript_path  TEXT PRIMARY KEY,
+                last_line        INTEGER NOT NULL DEFAULT 0
+            );
+
             CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
                 title,
                 body,

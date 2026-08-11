@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Installs the knowledgebase MCP server, UserPromptSubmit hook, and Stop hook
-# into ~/.claude/settings.json (follows symlinks). Safe to re-run.
+# Installs the knowledgebase MCP server and its hooks (UserPromptSubmit, Stop,
+# PreCompact, SessionEnd) into ~/.claude/settings.json (follows symlinks). Safe to re-run.
 set -e
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -55,15 +55,21 @@ def register_hook(hooks, event, cmd):
     entries[:] = [h for h in entries if cmd not in str(h)]
     entries.append({"hooks": [{"type": "command", "command": cmd}]})
 
-submit_cmd = f"{repo_dir}/hooks/user_prompt_submit.sh"
-stop_cmd   = f"{repo_dir}/hooks/stop.sh"
+submit_cmd       = f"{repo_dir}/hooks/user_prompt_submit.sh"
+stop_cmd         = f"{repo_dir}/hooks/stop.sh"
+pre_compact_cmd  = f"{repo_dir}/hooks/pre_compact.sh"
+session_end_cmd  = f"{repo_dir}/hooks/session_end.sh"
 
 register_hook(hooks, "UserPromptSubmit", submit_cmd)
 register_hook(hooks, "Stop", stop_cmd)
+register_hook(hooks, "PreCompact", pre_compact_cmd)
+register_hook(hooks, "SessionEnd", session_end_cmd)
 
 settings_path.write_text(json.dumps(settings, indent=2) + "\n")
 print(f"  UserPromptSubmit hook     → {submit_cmd}")
 print(f"  Stop hook                 → {stop_cmd}")
+print(f"  PreCompact hook           → {pre_compact_cmd}")
+print(f"  SessionEnd hook           → {session_end_cmd}")
 PYEOF
 
 echo "==> knowledgebase: install complete."
