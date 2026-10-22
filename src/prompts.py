@@ -33,3 +33,18 @@ def register(mcp: FastMCP) -> None:
             f"For each, call kb_add_entry(project='{project}', ...) with an appropriate type. "
             f"Be concise but complete — these entries will be loaded in future sessions."
         )
+
+    @mcp.prompt()
+    def remember_this(project: str, note: str) -> str:
+        """Save something the user explicitly asked to remember, verbatim intent preserved.
+
+        Use this when the user says "remember this", "note that", or similar — not for
+        end-of-session summarization (see capture_session).
+        """
+        return (
+            f"The user explicitly asked to remember this for project '{project}': {note}\n\n"
+            f"Call kb_add_entry(project='{project}', ...) now, choosing the most fitting type "
+            f"(idea, finding, understanding, decision, context, question, note). Keep the title "
+            f"and body faithful to what the user actually said — don't paraphrase away specifics "
+            f"or infer beyond what they stated."
+        )

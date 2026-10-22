@@ -16,7 +16,11 @@ surfaced and captured automatically, with no manual note-taking required.
    every prompt. It full-text-searches the current project's saved entries (falling back to the
    most recently updated ones if there's no match) and injects a `<kb-context>` block into the
    conversation.
-2. **MCP tools** let Claude read and write knowledge at any point during the session.
+2. **MCP tools** let Claude read and write knowledge at any point during the session. This
+   includes explicit human-in-the-loop capture: `kb_add_entry` isn't tied to auto-summarization —
+   if you say "remember this" or "note that" mid-conversation, Claude calls it right then with
+   your own framing, independent of (and more reliable than) anything the auto-save summarizer
+   would infer later. See the `remember_this` MCP prompt below.
 3. **`Stop` hook** (`hooks/stop.sh`) fires at the end of every session and reminds Claude to capture
    anything worth saving before it ends.
 4. **`PreCompact`/`SessionEnd` hooks** (`hooks/pre_compact.sh`, `hooks/session_end.sh` →
@@ -45,13 +49,21 @@ optionally saving new entries → session ends → Stop hook nudges a final capt
 
 Entry `type` is one of: `idea`, `finding`, `understanding`, `decision`, `context`, `question`, `note`.
 
+## MCP prompts
+
+| Prompt | Purpose |
+|---|---|
+| `project_context` | Load all stored knowledge for a project at the start of a session |
+| `capture_session` | Summarize and save findings/decisions at the end of a session |
+| `remember_this` | Save something the user explicitly asked to remember, right now, in their own words |
+
 ## Architecture
 
 ```
 src/
 ├── server.py    # FastMCP entrypoint (stdio transport)
 ├── tools.py     # MCP tool implementations
-├── prompts.py   # project_context / capture_session prompts
+├── prompts.py   # project_context / capture_session / remember_this prompts
 └── db.py        # SQLite schema (projects, entries, entries_fts) at ~/.claude/knowledgebase.db
 
 hooks/
