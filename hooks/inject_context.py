@@ -21,8 +21,8 @@ from typing import Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from db import migrate  # noqa: E402
+from hook_log import log  # noqa: E402
 
-LOG_PATH = Path.home() / ".claude" / "knowledgebase-hook.log"
 MAX_BYTES = 2000
 PROJECT_MAX_BYTES = 200
 EXCERPT_CHARS = 240
@@ -216,10 +216,5 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception:
-        try:
-            LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-            with LOG_PATH.open("a") as f:
-                f.write(f"{datetime.now().isoformat()} inject_context failed\n{traceback.format_exc()}\n")
-        except OSError:
-            pass
+        log("inject_context", f"failed\n{traceback.format_exc()}")
         sys.exit(0)

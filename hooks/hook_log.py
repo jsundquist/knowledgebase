@@ -2,6 +2,7 @@
 
 Never raises: logging must not break a hook. Also usable from shell:
     python3 hook_log.py <source> <message>
+    python3 hook_log.py --path          # print the log path
 """
 from __future__ import annotations
 
@@ -25,4 +26,7 @@ def log(source: str, message: str) -> None:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 2 and sys.argv[1] == "--path":
+        print(log_path())
+        sys.exit(0)
     log(sys.argv[1] if len(sys.argv) > 1 else "hook", " ".join(sys.argv[2:]))

@@ -14,7 +14,7 @@ INJECT="$REPO_DIR/hooks/inject_context.py"
 
 # Read the prompt from stdin (Claude Code passes it as JSON on stdin)
 PAYLOAD="$(cat)"
-LOG="$HOME/.claude/knowledgebase-hook.log"
+LOG="$(python3 "$REPO_DIR/hooks/hook_log.py" --path)"
 PARSED="$(echo "$PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('session_id','')); print(d.get('prompt',''))" 2>/dev/null)" || {
     python3 "$REPO_DIR/hooks/hook_log.py" user_prompt_submit "failed to parse JSON payload" || true
     exit 0
