@@ -247,6 +247,15 @@ def test_update_entry_status_active_clears_superseded_by(mcp_tools):
     assert entry["superseded_by"] is None
 
 
+def test_update_entry_active_with_superseded_by_is_error(mcp_tools):
+    old = _superseded_pair(mcp_tools)
+    result = mcp_tools["kb_update_entry"](old, status="active", superseded_by=999)
+    assert "error" in result
+    entry = mcp_tools["kb_get_entry"](old)
+    assert entry["status"] == "superseded"
+    assert entry["superseded_by"] is not None
+
+
 def test_update_entry_invalid_status(mcp_tools):
     eid = mcp_tools["kb_add_entry"](project="p", title="t", body="b")["id"]
     assert "error" in mcp_tools["kb_update_entry"](eid, status="bogus")

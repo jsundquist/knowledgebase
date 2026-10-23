@@ -208,6 +208,9 @@ def register(mcp: FastMCP) -> None:
         if status and status not in ENTRY_STATUSES:
             return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(sorted(ENTRY_STATUSES))}"}
 
+        if status == "active" and superseded_by:
+            return {"error": "status='active' clears superseded_by; do not pass a non-zero superseded_by with it"}
+
         conn = get_conn()
         try:
             row = conn.execute("SELECT * FROM entries WHERE id = ?", (id,)).fetchone()
