@@ -5,7 +5,10 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT="$("$REPO_DIR/.venv/bin/python" "$REPO_DIR/hooks/kb_project.py" "$PWD" 2>/dev/null || basename "$PWD")"
+PROJECT="$("$REPO_DIR/.venv/bin/python" "$REPO_DIR/hooks/kb_project.py" "$PWD" 2>>"$HOME/.claude/knowledgebase-hook.log")" || {
+    python3 "$REPO_DIR/hooks/hook_log.py" stop "project resolution failed; using directory name" || true
+    PROJECT="$(basename "$PWD")"
+}
 
 cat <<EOF
 <kb-reminder>

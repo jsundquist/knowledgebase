@@ -11,6 +11,9 @@ import os
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from hook_log import log  # noqa: E402
+
 
 def resolve_project(cwd: str) -> str:
     try:
@@ -26,8 +29,14 @@ def resolve_project(cwd: str) -> str:
             if os.path.basename(common) == ".git":
                 return os.path.basename(os.path.dirname(common))
             return os.path.basename(common).removesuffix(".git")
-    except (OSError, subprocess.SubprocessError):
-        pass
+        if "not a git repository" not in result.stderr:
+            log(
+                "kb_project",
+                f"git project resolution failed (rc={result.returncode}, {result.stderr.strip()!r}); "
+                f"using directory-name fallback for {cwd}",
+            )
+    except (OSError, subprocess.SubprocessError) as e:
+        log("kb_project", f"git unavailable ({e}); using directory-name fallback for {cwd}")
     return os.path.basename(cwd.rstrip("/")) or cwd
 
 
