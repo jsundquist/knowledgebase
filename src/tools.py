@@ -191,6 +191,9 @@ def register(mcp: FastMCP) -> None:
         superseded_by pointing at its replacement). Only 'active' entries are injected
         into session context.
 
+        Reactivating: setting status='active' automatically clears superseded_by. To clear
+        superseded_by without changing status, pass superseded_by=0.
+
         Args:
             id:    Entry ID (from kb_add_entry or kb_search results).
             title: New title (optional).
@@ -198,7 +201,7 @@ def register(mcp: FastMCP) -> None:
             tags:  New tags (optional).
             type:  New type (optional).
             status: One of: active, superseded, stale (optional).
-            superseded_by: ID of the entry that replaces this one (optional).
+            superseded_by: ID of the entry that replaces this one; 0 clears the link (optional).
         """
         if type and type not in ENTRY_TYPES:
             return {"error": f"Invalid type '{type}'. Must be one of: {', '.join(sorted(ENTRY_TYPES))}"}
@@ -216,7 +219,12 @@ def register(mcp: FastMCP) -> None:
             new_tags = tags.strip() if tags is not None else row["tags"]
             new_type = type if type is not None else row["type"]
             new_status = status if status is not None else row["status"]
-            new_superseded_by = superseded_by if superseded_by is not None else row["superseded_by"]
+            if superseded_by == 0 or status == "active":
+                new_superseded_by = None
+            elif superseded_by is not None:
+                new_superseded_by = superseded_by
+            else:
+                new_superseded_by = row["superseded_by"]
 
             with conn:
                 conn.execute(
