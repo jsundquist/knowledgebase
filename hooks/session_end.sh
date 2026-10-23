@@ -13,12 +13,12 @@ PAYLOAD="$(cat)"
 
 REASON="$(printf '%s' "$PAYLOAD" | python3 -c "
 import sys, json
-try:
-    d = json.load(sys.stdin)
-except Exception:
-    d = {}
+d = json.load(sys.stdin)
 print(d.get('reason') or '')
-" 2>/dev/null || true)"
+" 2>/dev/null)" || {
+    python3 "$REPO_DIR/hooks/hook_log.py" session_end "failed to parse JSON payload" || true
+    REASON=""
+}
 
 if [[ "$(echo "$REASON" | tr '[:upper:]' '[:lower:]')" != "clear" ]]; then
     exit 0

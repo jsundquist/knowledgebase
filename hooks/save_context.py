@@ -18,9 +18,11 @@ import sqlite3
 import subprocess
 import sys
 import time
+import traceback
 import urllib.error
 import urllib.request
 
+from hook_log import log
 from kb_project import resolve_project
 
 MAX_CHARS = 20_000
@@ -252,7 +254,8 @@ def run(payload: dict, db_path: str) -> None:
 def main() -> None:
     try:
         payload = json.load(sys.stdin)
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError) as e:
+        log("save_context", f"malformed hook payload: {e}")
         sys.exit(0)
 
     db_path = os.environ.get("KB_DB_PATH") or os.path.expanduser("~/.claude/knowledgebase.db")
@@ -261,6 +264,7 @@ def main() -> None:
         run(payload, db_path)
     except Exception:
         # Fail open — this hook must never block /clear or /compact.
+        log("save_context", f"failed: {traceback.format_exc()}")
         sys.exit(0)
 
 
