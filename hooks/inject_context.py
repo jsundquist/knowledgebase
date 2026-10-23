@@ -15,7 +15,9 @@ import sys
 import time
 import traceback
 from datetime import datetime
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from db import migrate  # noqa: E402
@@ -35,6 +37,18 @@ STOPWORDS = frozenset("""
     these give day most are does did should why where who while here let need please
     should still too very via yes yet near
 """.split())
+
+
+@contextmanager
+def open_db(db_path: str) -> Iterator[sqlite3.Connection]:
+    """Open the knowledgebase, apply migrations, and always close on exit."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        migrate(conn)
+        yield conn
+    finally:
+        conn.close()
 
 
 def is_automated(prompt: str) -> bool:
@@ -59,10 +73,7 @@ def build_fts_query(prompt: str) -> str:
 
 
 def search(db_path: str, project: str, query: str, limit: int = MATCH_LIMIT) -> list[dict]:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    try:
-        migrate(conn)
+    with open_db(db_path) as conn:
         rows = conn.execute("""
             SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
             FROM entries_fts
@@ -75,15 +86,10 @@ def search(db_path: str, project: str, query: str, limit: int = MATCH_LIMIT) -> 
             LIMIT ?
         """, (query, project, limit)).fetchall()
         return [dict(r) for r in rows]
-    finally:
-        conn.close()
 
 
 def get_project_entries(db_path: str, project: str, limit: int = INDEX_LIMIT) -> list[dict]:
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    try:
-        migrate(conn)
+    with open_db(db_path) as conn:
         rows = conn.execute("""
             SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
             FROM entries e
@@ -93,16 +99,30 @@ def get_project_entries(db_path: str, project: str, limit: int = INDEX_LIMIT) ->
             LIMIT ?
         """, (project, limit)).fetchall()
         return [dict(r) for r in rows]
-    finally:
-        conn.close()
 
 
-def _seen(conn: sqlite3.Connection, session_id: str) -> dict[int, float]:
+# --- Session state (inject_state table) ------------------------------------
+
+def load_seen_entries(conn: sqlite3.Connection, session_id: str) -> dict[int, float]:
+    """Map entry id -> `updated` stamp for entries already injected this session."""
     rows = conn.execute(
         "SELECT entry_id, updated FROM inject_state WHERE session_id = ?", (session_id,)
     ).fetchall()
     return {r[0]: r[1] for r in rows}
 
+
+def record_injected(conn: sqlite3.Connection, session_id: str, entries: list[dict]) -> None:
+    """Remember injected entries for the session and prune expired state rows."""
+    now = time.time()
+    with conn:
+        conn.execute("DELETE FROM inject_state WHERE ts < ?", (now - STATE_TTL_SECONDS,))
+        conn.executemany(
+            "INSERT OR REPLACE INTO inject_state (session_id, entry_id, updated, ts) VALUES (?,?,?,?)",
+            [(session_id, e["id"], e["updated"], now) for e in entries],
+        )
+
+
+# --- Rendering ---------------------------------------------------------------
 
 def _excerpt(body: str) -> str:
     lines = [ln.strip() for ln in body.splitlines() if ln.strip()][:2]
@@ -121,7 +141,7 @@ def format_entry(e: dict) -> str:
     return "\n".join(out)
 
 
-def render(project: str, entries: list[dict]) -> tuple[str, list[dict]]:
+def render_block(project: str, entries: list[dict]) -> tuple[str, list[dict]]:
     """Build the block, adding entries until MAX_BYTES. Returns (text, entries used)."""
     header = f"<kb-context>\nProject: {project}\n\n"
     footer = "Excerpts only — call kb_get_entry(id) for the full text.\n</kb-context>"
@@ -149,13 +169,11 @@ def main() -> None:
     fts_query = build_fts_query(prompt)
     matches = search(db_path, project, fts_query) if fts_query else []
 
-    conn = sqlite3.connect(db_path)
-    try:
-        migrate(conn)
+    with open_db(db_path) as conn:
         seen: dict[int, float] = {}
         first_in_session = False
         if session_id:
-            seen = _seen(conn, session_id)
+            seen = load_seen_entries(conn, session_id)
             first_in_session = not seen
 
         candidates = list(matches)
@@ -167,18 +185,10 @@ def main() -> None:
         if not fresh:
             sys.exit(0)
 
-        text, used = render(project, fresh)
+        text, used = render_block(project, fresh)
 
         if session_id:
-            now = time.time()
-            with conn:
-                conn.execute("DELETE FROM inject_state WHERE ts < ?", (now - STATE_TTL_SECONDS,))
-                conn.executemany(
-                    "INSERT OR REPLACE INTO inject_state (session_id, entry_id, updated, ts) VALUES (?,?,?,?)",
-                    [(session_id, e["id"], e["updated"], now) for e in used],
-                )
-    finally:
-        conn.close()
+            record_injected(conn, session_id, used)
 
     print(text)
 
