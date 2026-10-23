@@ -67,17 +67,24 @@ src/
 ├── server.py    # FastMCP entrypoint (stdio transport)
 ├── tools.py     # MCP tool implementations
 ├── prompts.py   # project_context / capture_session / remember_this prompts
-└── db.py        # SQLite schema (projects, entries, entries_fts) at ~/.claude/knowledgebase.db
+└── db.py        # SQLite schema (projects, entries, entries_fts, inject_state, hook_state)
+                 # at ~/.claude/knowledgebase.db
 
 hooks/
 ├── user_prompt_submit.sh  # UserPromptSubmit hook wrapper
-├── inject_context.py      # builds and prints the <kb-context> block
+├── inject_context.py      # builds and prints the <kb-context> block (tracks per-session
+│                          # injected entries in the inject_state table)
+├── kb_project.py          # resolves the project name from the git common dir (worktree-safe)
+├── hook_log.py            # shared failure log: ~/.claude/knowledgebase-hook.log
 ├── stop.sh                # Stop hook — reminds Claude to save findings
 ├── pre_compact.sh         # PreCompact hook wrapper (manual + automatic /compact)
 ├── session_end.sh         # SessionEnd hook wrapper (fires save on /clear)
 └── save_context.py        # summarizes the transcript delta and writes an auto-saved entry
 
 install.sh       # installer
+
+tests/           # test_db, test_tools, test_inject_context, test_save_context,
+                 # test_kb_project, test_hook_log (+ conftest.py)
 ```
 
 ## Auto-save on /clear and /compact
@@ -124,5 +131,4 @@ changes.
 uv run pytest
 ```
 
-Runs the test suite (`tests/test_db.py`, `tests/test_tools.py`, `tests/test_inject_context.py`,
-`tests/test_save_context.py`).
+Runs the test suite in `tests/` (db, tools, inject_context, save_context, kb_project, hook_log).
