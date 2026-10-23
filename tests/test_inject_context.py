@@ -68,8 +68,13 @@ def test_build_fts_query_empty_prompt():
     assert inject_context.build_fts_query("") == ""
 
 
+def _conn(db):
+    return inject_context.open_db(str(db))
+
+
 def test_search_returns_relevant_entries(populated_db):
-    results = inject_context.search(str(populated_db), "my-app", '"auth" OR "jwt"')
+    with _conn(populated_db) as conn:
+        results = inject_context.search(conn, "my-app", '"auth" OR "jwt"')
     assert len(results) > 0
     assert any("Auth" in r["title"] for r in results)
 
@@ -77,17 +82,20 @@ def test_search_returns_relevant_entries(populated_db):
 def test_search_project_scoped(populated_db):
     # The fallback only fires when the FTS query itself finds nothing globally,
     # so use a term that doesn't exist anywhere in the DB.
-    results = inject_context.search(str(populated_db), "other-project", "zzznomatch")
+    with _conn(populated_db) as conn:
+        results = inject_context.search(conn, "other-project", "zzznomatch")
     assert results == []
 
 
 def test_get_project_entries_returns_all(populated_db):
-    results = inject_context.get_project_entries(str(populated_db), "my-app")
+    with _conn(populated_db) as conn:
+        results = inject_context.get_project_entries(conn, "my-app")
     assert len(results) == 2
 
 
 def test_get_project_entries_unknown_project(populated_db):
-    results = inject_context.get_project_entries(str(populated_db), "unknown")
+    with _conn(populated_db) as conn:
+        results = inject_context.get_project_entries(conn, "unknown")
     assert results == []
 
 
@@ -209,3 +217,23 @@ def test_no_session_id_with_match_excludes_recent_index(populated_db, capsys):
     out = capsys.readouterr().out
     assert "Auth uses JWT" in out
     assert "Use PostgreSQL" not in out
+
+
+def test_single_prompt_opens_one_connection_and_migrates_once(populated_db, monkeypatch, capsys):
+    calls = {"connect": 0, "migrate": 0}
+    real_connect = sqlite3.connect
+    real_migrate = inject_context.migrate
+
+    def counting_connect(*a, **k):
+        calls["connect"] += 1
+        return real_connect(*a, **k)
+
+    def counting_migrate(conn):
+        calls["migrate"] += 1
+        return real_migrate(conn)
+
+    monkeypatch.setattr(inject_context.sqlite3, "connect", counting_connect)
+    monkeypatch.setattr(inject_context, "migrate", counting_migrate)
+    _run(populated_db, "my-app", "how does auth work", "s1")
+    assert "<kb-context>" in capsys.readouterr().out
+    assert calls == {"connect": 1, "migrate": 1}

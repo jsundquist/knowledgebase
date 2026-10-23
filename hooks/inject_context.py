@@ -14,8 +14,8 @@ import sqlite3
 import sys
 import time
 import traceback
-from datetime import datetime
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
@@ -72,33 +72,31 @@ def build_fts_query(prompt: str) -> str:
     return " OR ".join(f'"{t}"' for t in terms)
 
 
-def search(db_path: str, project: str, query: str, limit: int = MATCH_LIMIT) -> list[dict]:
-    with open_db(db_path) as conn:
-        rows = conn.execute("""
-            SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
-            FROM entries_fts
-            JOIN entries e ON entries_fts.rowid = e.id
-            JOIN projects p ON e.project_id = p.id
-            WHERE entries_fts MATCH ?
-              AND p.name = ?
-              AND e.status = 'active'
-            ORDER BY bm25(entries_fts, 10.0, 1.0, 5.0)
-            LIMIT ?
-        """, (query, project, limit)).fetchall()
-        return [dict(r) for r in rows]
+def search(conn: sqlite3.Connection, project: str, query: str, limit: int = MATCH_LIMIT) -> list[dict]:
+    rows = conn.execute("""
+        SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
+        FROM entries_fts
+        JOIN entries e ON entries_fts.rowid = e.id
+        JOIN projects p ON e.project_id = p.id
+        WHERE entries_fts MATCH ?
+          AND p.name = ?
+          AND e.status = 'active'
+        ORDER BY bm25(entries_fts, 10.0, 1.0, 5.0)
+        LIMIT ?
+    """, (query, project, limit)).fetchall()
+    return [dict(r) for r in rows]
 
 
-def get_project_entries(db_path: str, project: str, limit: int = INDEX_LIMIT) -> list[dict]:
-    with open_db(db_path) as conn:
-        rows = conn.execute("""
-            SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
-            FROM entries e
-            JOIN projects p ON e.project_id = p.id
-            WHERE p.name = ? AND e.status = 'active'
-            ORDER BY e.updated DESC
-            LIMIT ?
-        """, (project, limit)).fetchall()
-        return [dict(r) for r in rows]
+def get_project_entries(conn: sqlite3.Connection, project: str, limit: int = INDEX_LIMIT) -> list[dict]:
+    rows = conn.execute("""
+        SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
+        FROM entries e
+        JOIN projects p ON e.project_id = p.id
+        WHERE p.name = ? AND e.status = 'active'
+        ORDER BY e.updated DESC
+        LIMIT ?
+    """, (project, limit)).fetchall()
+    return [dict(r) for r in rows]
 
 
 # --- Session state (inject_state table) ------------------------------------
@@ -178,9 +176,9 @@ def main() -> None:
         sys.exit(0)
 
     fts_query = build_fts_query(prompt)
-    matches = search(db_path, project, fts_query) if fts_query else []
 
     with open_db(db_path) as conn:
+        matches = search(conn, project, fts_query) if fts_query else []
         seen: dict[int, float] = {}
         first_in_session = False
         if session_id:
@@ -190,7 +188,7 @@ def main() -> None:
         candidates = list(matches)
         if first_in_session:
             have = {e["id"] for e in candidates}
-            candidates += [e for e in get_project_entries(db_path, project) if e["id"] not in have]
+            candidates += [e for e in get_project_entries(conn, project) if e["id"] not in have]
 
         fresh = [e for e in candidates if seen.get(e["id"]) != e["updated"]]
         if not fresh:
