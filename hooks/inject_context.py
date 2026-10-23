@@ -24,6 +24,7 @@ from db import migrate  # noqa: E402
 
 LOG_PATH = Path.home() / ".claude" / "knowledgebase-hook.log"
 MAX_BYTES = 2000
+PROJECT_MAX_BYTES = 200
 EXCERPT_CHARS = 240
 MATCH_LIMIT = 5
 INDEX_LIMIT = 5
@@ -150,16 +151,23 @@ def _truncate_to_bytes(text: str, limit: int) -> str:
 
 def render_block(project: str, entries: list[dict]) -> tuple[str, list[dict]]:
     """Build the block, adding entries until MAX_BYTES. Returns (text, entries used)."""
+    project = _truncate_to_bytes(project, PROJECT_MAX_BYTES)
     header = f"<kb-context>\nProject: {project}\n\n"
     footer = "Excerpts only — call kb_get_entry(id) for the full text.\n</kb-context>"
+    # Total bytes the entries may use. Reserve the footer, plus 1 byte for the
+    # newline that print() appends, so the printed output never exceeds MAX_BYTES.
+    budget = MAX_BYTES - 1 - len(footer.encode())
     text = header
     used: list[dict] = []
     for e in entries:
         chunk = format_entry(e) + "\n\n"
-        if len((text + chunk + footer).encode()) > MAX_BYTES - 1:
+        remaining = budget - len(text.encode())
+        if len(chunk.encode()) > remaining:
             if used:
                 break
-            chunk = _truncate_to_bytes(chunk.rstrip("\n"), MAX_BYTES - 1 - len((text + footer).encode()) - 2) + "\n\n"
+            # First entry alone is too big: truncate it, reserving 2 bytes for the
+            # "\n\n" separator re-added below.
+            chunk = _truncate_to_bytes(chunk.rstrip("\n"), remaining - 2) + "\n\n"
         text += chunk
         used.append(e)
     return text + footer, used

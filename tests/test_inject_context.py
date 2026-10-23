@@ -237,3 +237,26 @@ def test_single_prompt_opens_one_connection_and_migrates_once(populated_db, monk
     _run(populated_db, "my-app", "how does auth work", "s1")
     assert "<kb-context>" in capsys.readouterr().out
     assert calls == {"connect": 1, "migrate": 1}
+
+
+def _entry(title="t", body="b", tags=""):
+    return {"id": 1, "type": "note", "title": title, "body": body, "tags": tags, "updated": 1.0}
+
+
+def test_render_block_oversized_body_stays_within_cap():
+    text, used = inject_context.render_block("p", [_entry(body="x" * 50000)])
+    assert len((text + "\n").encode()) <= inject_context.MAX_BYTES
+    assert len(used) == 1
+
+
+def test_render_block_oversized_tags_stay_within_cap():
+    text, used = inject_context.render_block("p", [_entry(tags=",".join(["tag"] * 20000))])
+    assert len((text + "\n").encode()) <= inject_context.MAX_BYTES
+    assert len(used) == 1
+
+
+def test_render_block_long_project_name_stays_within_cap():
+    text, used = inject_context.render_block("é" * 5000, [_entry(title="T" * 5000, body="x" * 5000)])
+    assert len((text + "\n").encode()) <= inject_context.MAX_BYTES
+    assert text.rstrip("\n").endswith("</kb-context>")
+    assert len(used) == 1
