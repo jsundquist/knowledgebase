@@ -204,3 +204,26 @@ def test_search_type_filter(mcp_tools):
     mcp_tools["kb_add_entry"](project="p", title="auth decision", body="b", type="decision")
     results = mcp_tools["kb_search"](query="auth", type="finding")
     assert all(r["type"] == "finding" for r in results)
+
+
+# ---------------------------------------------------------------------------
+# entry status / supersession
+# ---------------------------------------------------------------------------
+
+def test_new_entry_is_active(mcp_tools):
+    eid = mcp_tools["kb_add_entry"](project="p", title="t", body="b")["id"]
+    assert mcp_tools["kb_get_entry"](eid)["status"] == "active"
+
+
+def test_update_entry_status_and_superseded_by(mcp_tools):
+    old = mcp_tools["kb_add_entry"](project="p", title="old", body="b")["id"]
+    new = mcp_tools["kb_add_entry"](project="p", title="new", body="b")["id"]
+    mcp_tools["kb_update_entry"](old, status="superseded", superseded_by=new)
+    entry = mcp_tools["kb_get_entry"](old)
+    assert entry["status"] == "superseded"
+    assert entry["superseded_by"] == new
+
+
+def test_update_entry_invalid_status(mcp_tools):
+    eid = mcp_tools["kb_add_entry"](project="p", title="t", body="b")["id"]
+    assert "error" in mcp_tools["kb_update_entry"](eid, status="bogus")

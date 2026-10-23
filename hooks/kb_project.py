@@ -1,0 +1,35 @@
+"""
+Resolves the knowledgebase project name for a working directory.
+
+Uses the git common dir so a linked worktree (e.g. .claude/worktrees/agent-<id>)
+maps to the same project as the repo it was created from. Falls back to the
+directory name outside a git repo.
+"""
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+
+
+def resolve_project(cwd: str) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        common = result.stdout.strip()
+        if result.returncode == 0 and common:
+            common = common.rstrip("/")
+            if os.path.basename(common) == ".git":
+                return os.path.basename(os.path.dirname(common))
+            return os.path.basename(common).removesuffix(".git")
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return os.path.basename(cwd.rstrip("/")) or cwd
+
+
+if __name__ == "__main__":
+    print(resolve_project(sys.argv[1] if len(sys.argv) > 1 else os.getcwd()))

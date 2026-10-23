@@ -4,7 +4,8 @@
 # if nothing worth capturing came up.
 set -euo pipefail
 
-PROJECT="$(basename "$PWD")"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT="$("$REPO_DIR/.venv/bin/python" "$REPO_DIR/hooks/kb_project.py" "$PWD" 2>/dev/null || basename "$PWD")"
 
 cat <<EOF
 <kb-reminder>

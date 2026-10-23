@@ -7,7 +7,7 @@ from typing import Literal, Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from db import ENTRY_TYPES, get_conn, get_or_create_project
+from db import ENTRY_STATUSES, ENTRY_TYPES, get_conn, get_or_create_project
 
 EntryType = Literal["idea", "finding", "understanding", "decision", "context", "question", "note"]
 
@@ -94,7 +94,7 @@ def register(mcp: FastMCP) -> None:
 
             rows = conn.execute(f"""
                 SELECT e.id, p.name AS project, e.type, e.title, e.body, e.tags,
-                       e.created, e.updated,
+                       e.status, e.superseded_by, e.created, e.updated,
                        rank
                 FROM entries_fts
                 JOIN entries e ON entries_fts.rowid = e.id
@@ -133,7 +133,8 @@ def register(mcp: FastMCP) -> None:
                 params.append(type)
 
             rows = conn.execute(f"""
-                SELECT e.id, e.type, e.title, e.body, e.tags, e.created, e.updated
+                SELECT e.id, e.type, e.title, e.body, e.tags, e.status, e.superseded_by,
+                       e.created, e.updated
                 FROM entries e
                 WHERE e.project_id = ?
                 {type_filter}
@@ -181,8 +182,14 @@ def register(mcp: FastMCP) -> None:
         body: Optional[str] = None,
         tags: Optional[str] = None,
         type: Optional[str] = None,
+        status: Optional[str] = None,
+        superseded_by: Optional[int] = None,
     ) -> dict:
         """Update an existing knowledge entry.
+
+        Mark an entry that no longer matches reality as 'stale', or 'superseded' (with
+        superseded_by pointing at its replacement). Only 'active' entries are injected
+        into session context.
 
         Args:
             id:    Entry ID (from kb_add_entry or kb_search results).
@@ -190,9 +197,13 @@ def register(mcp: FastMCP) -> None:
             body:  New body (optional).
             tags:  New tags (optional).
             type:  New type (optional).
+            status: One of: active, superseded, stale (optional).
+            superseded_by: ID of the entry that replaces this one (optional).
         """
         if type and type not in ENTRY_TYPES:
             return {"error": f"Invalid type '{type}'. Must be one of: {', '.join(sorted(ENTRY_TYPES))}"}
+        if status and status not in ENTRY_STATUSES:
+            return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(sorted(ENTRY_STATUSES))}"}
 
         conn = get_conn()
         try:
@@ -204,11 +215,13 @@ def register(mcp: FastMCP) -> None:
             new_body = body if body is not None else row["body"]
             new_tags = tags.strip() if tags is not None else row["tags"]
             new_type = type if type is not None else row["type"]
+            new_status = status if status is not None else row["status"]
+            new_superseded_by = superseded_by if superseded_by is not None else row["superseded_by"]
 
             with conn:
                 conn.execute(
-                    "UPDATE entries SET title=?, body=?, tags=?, type=?, updated=? WHERE id=?",
-                    (new_title, new_body, new_tags, new_type, time.time(), id),
+                    "UPDATE entries SET title=?, body=?, tags=?, type=?, status=?, superseded_by=?, updated=? WHERE id=?",
+                    (new_title, new_body, new_tags, new_type, new_status, new_superseded_by, time.time(), id),
                 )
             return {"id": id, "status": "updated"}
         finally:
@@ -243,7 +256,7 @@ def register(mcp: FastMCP) -> None:
         try:
             row = conn.execute("""
                 SELECT e.id, p.name AS project, e.type, e.title, e.body, e.tags,
-                       e.created, e.updated
+                       e.status, e.superseded_by, e.created, e.updated
                 FROM entries e
                 JOIN projects p ON e.project_id = p.id
                 WHERE e.id = ?

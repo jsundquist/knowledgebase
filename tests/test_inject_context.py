@@ -35,19 +35,33 @@ def populated_db(tmp_db, monkeypatch):
 
 
 def test_build_fts_query_extracts_words():
-    query = inject_context.build_fts_query("How does the auth system work?")
-    assert "auth" in query
-    assert "system" in query
-    assert "work" in query
+    query = inject_context.build_fts_query("How does the auth system behave?")
+    assert '"auth"' in query
+    assert '"system"' in query
+    assert '"behave"' in query
+
+
+def test_build_fts_query_drops_stopwords():
+    query = inject_context.build_fts_query("what is the auth for this")
+    assert query == '"auth"'
+
+
+def test_build_fts_query_quotes_fts_operators():
+    query = inject_context.build_fts_query("not auth and near jwt")
+    assert query == '"auth" OR "jwt"'
+
+
+def test_build_fts_query_only_stopwords():
+    assert inject_context.build_fts_query("what about this") == ""
 
 
 def test_build_fts_query_skips_short_words():
     query = inject_context.build_fts_query("is it ok to do this")
     # Words under 3 chars should be excluded; split to check whole tokens
     tokens = query.split(" OR ")
-    assert "is" not in tokens
-    assert "it" not in tokens
-    assert "ok" not in tokens
+    assert '"is"' not in tokens
+    assert '"it"' not in tokens
+    assert '"ok"' not in tokens
 
 
 def test_build_fts_query_empty_prompt():
@@ -55,7 +69,7 @@ def test_build_fts_query_empty_prompt():
 
 
 def test_search_returns_relevant_entries(populated_db):
-    results = inject_context.search(str(populated_db), "my-app", "auth OR JWT")
+    results = inject_context.search(str(populated_db), "my-app", '"auth" OR "jwt"')
     assert len(results) > 0
     assert any("Auth" in r["title"] for r in results)
 
@@ -99,4 +113,76 @@ def test_main_requires_args(capsys):
     with pytest.raises(SystemExit) as exc:
         inject_context.main()
     assert exc.value.code == 0
+    assert capsys.readouterr().out == ""
+
+
+def _run(db, project, prompt, session_id=""):
+    sys.argv = ["inject_context.py", str(db), project, prompt, session_id]
+    try:
+        inject_context.main()
+    except SystemExit:
+        pass
+
+
+def test_block_includes_ids_and_is_capped(tmp_db, capsys):
+    conn = get_conn()
+    with conn:
+        pid = get_or_create_project(conn, "big")
+        for i in range(30):
+            conn.execute(
+                "INSERT INTO entries (project_id, type, title, body, tags, created, updated) VALUES (?,?,?,?,?,?,?)",
+                (pid, "note", f"widget note {i}", "widget " + "x" * 5000, "", 1.0, 1.0),
+            )
+    conn.close()
+    _run(tmp_db, "big", "tell me about widget", "s1")
+    out = capsys.readouterr().out
+    assert "(id " in out
+    assert len(out.encode()) <= inject_context.MAX_BYTES
+
+
+def test_superseded_and_stale_entries_not_injected(populated_db, capsys):
+    conn = get_conn()
+    with conn:
+        conn.execute("UPDATE entries SET status='stale' WHERE title='Auth uses JWT'")
+    conn.close()
+    _run(populated_db, "my-app", "how does auth work", "s1")
+    assert "Auth uses JWT" not in capsys.readouterr().out
+
+
+def test_injects_once_per_session(populated_db, capsys):
+    _run(populated_db, "my-app", "how does auth work", "s1")
+    assert "<kb-context>" in capsys.readouterr().out
+    _run(populated_db, "my-app", "how does auth work", "s1")
+    assert capsys.readouterr().out == ""
+    _run(populated_db, "my-app", "how does auth work", "s2")
+    assert "<kb-context>" in capsys.readouterr().out
+
+
+def test_updated_entry_is_reinjected(populated_db, capsys):
+    _run(populated_db, "my-app", "how does auth work", "s1")
+    capsys.readouterr()
+    conn = get_conn()
+    with conn:
+        conn.execute("UPDATE entries SET body='changed', updated=updated+10 WHERE title='Auth uses JWT'")
+    conn.close()
+    _run(populated_db, "my-app", "how does auth work", "s1")
+    out = capsys.readouterr().out
+    assert "Auth uses JWT" in out
+    assert "Use PostgreSQL" not in out
+
+
+def test_first_prompt_gets_index_even_without_match(populated_db, capsys):
+    _run(populated_db, "my-app", "zzznomatch qqqnomatch", "s1")
+    assert "Use PostgreSQL" in capsys.readouterr().out
+
+
+def test_no_session_id_only_injects_matches(populated_db, capsys):
+    _run(populated_db, "my-app", "zzznomatch qqqnomatch")
+    assert capsys.readouterr().out == ""
+
+
+def test_automated_prompt_skipped(populated_db, capsys):
+    _run(populated_db, "my-app", "[SYSTEM NOTIFICATION] agent finished auth work", "s1")
+    assert capsys.readouterr().out == ""
+    _run(populated_db, "my-app", "<task-notification>auth done</task-notification>", "s1")
     assert capsys.readouterr().out == ""

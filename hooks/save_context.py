@@ -21,6 +21,8 @@ import time
 import urllib.error
 import urllib.request
 
+from kb_project import resolve_project
+
 MAX_CHARS = 20_000
 SUBPROCESS_TIMEOUT_SECS = 60
 HTTP_TIMEOUT_SECS = 60
@@ -239,7 +241,7 @@ def run(payload: dict, db_path: str) -> None:
         if not entry or entry.get("skip"):
             return
 
-        project = os.path.basename(payload.get("cwd") or os.getcwd())
+        project = resolve_project(payload.get("cwd") or os.getcwd())
         save_entry(conn, project, entry, source_tag)
         set_last_line(conn, transcript_path, total_lines)
         conn.commit()

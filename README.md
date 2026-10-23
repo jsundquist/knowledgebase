@@ -13,9 +13,12 @@ surfaced and captured automatically, with no manual note-taking required.
 ## How it works
 
 1. **`UserPromptSubmit` hook** (`hooks/user_prompt_submit.sh` → `hooks/inject_context.py`) runs on
-   every prompt. It full-text-searches the current project's saved entries (falling back to the
-   most recently updated ones if there's no match) and injects a `<kb-context>` block into the
-   conversation.
+   every user prompt (automated notifications are skipped). It full-text-searches the current
+   project's `active` entries and injects a compact `<kb-context>` block (capped at ~2 KB: ids,
+   titles, short excerpts — use `kb_get_entry` for the full text). The first prompt of a session
+   also gets a short index of recent entries; after that only newly matching or changed entries
+   are injected. The project is resolved from the git common dir, so worktrees share their parent
+   repo's project. Hook failures are logged to `~/.claude/knowledgebase-hook.log`.
 2. **MCP tools** let Claude read and write knowledge at any point during the session. This
    includes explicit human-in-the-loop capture: `kb_add_entry` isn't tied to auto-summarization —
    if you say "remember this" or "note that" mid-conversation, Claude calls it right then with
@@ -43,7 +46,7 @@ optionally saving new entries → session ends → Stop hook nudges a final capt
 | `kb_search` | Full-text search across entries, optionally scoped by project/type |
 | `kb_get_project` | Fetch all entries for a project, grouped by type |
 | `kb_list_projects` | List known projects with entry counts and last-updated |
-| `kb_update_entry` | Partially update an existing entry |
+| `kb_update_entry` | Partially update an existing entry; set `status` (`active`/`superseded`/`stale`) and `superseded_by` to retire outdated entries |
 | `kb_delete_entry` | Delete an entry by id |
 | `kb_get_entry` | Fetch a single entry by id |
 

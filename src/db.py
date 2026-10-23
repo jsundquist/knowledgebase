@@ -9,6 +9,7 @@ from pathlib import Path
 DB_PATH = Path.home() / ".claude" / "knowledgebase.db"
 
 ENTRY_TYPES = {"idea", "finding", "understanding", "decision", "context", "question", "note"}
+ENTRY_STATUSES = {"active", "superseded", "stale"}
 
 
 def get_conn() -> sqlite3.Connection:
@@ -17,6 +18,24 @@ def get_conn() -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+def migrate(conn: sqlite3.Connection) -> None:
+    """Bring an existing database up to the current schema. Idempotent."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(entries)")}
+    if "status" not in cols:
+        conn.execute("ALTER TABLE entries ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    if "superseded_by" not in cols:
+        conn.execute("ALTER TABLE entries ADD COLUMN superseded_by INTEGER")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS inject_state (
+            session_id  TEXT NOT NULL,
+            entry_id    INTEGER NOT NULL,
+            updated     REAL NOT NULL,
+            ts          REAL NOT NULL,
+            PRIMARY KEY (session_id, entry_id)
+        )
+    """)
 
 
 def init_db() -> None:
@@ -74,6 +93,7 @@ def init_db() -> None:
                 VALUES (new.id, new.title, new.body, new.tags);
             END;
         """)
+        migrate(conn)
     conn.close()
 
 

@@ -1,43 +1,94 @@
 """
 Queries knowledgebase.db for entries relevant to the current project and prompt,
-then prints a <kb-context> block to stdout for Claude to consume.
+then prints a compact <kb-context> block to stdout for Claude to consume.
+
+The block is capped (MAX_BYTES), shows titles plus a short body excerpt with entry
+ids, and only includes active entries. Entries already injected in this session
+(and unchanged since) are skipped, so a project injects once per session and then
+only what newly matches.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 import sys
+import time
+import traceback
+from datetime import datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from db import migrate  # noqa: E402
+
+LOG_PATH = Path.home() / ".claude" / "knowledgebase-hook.log"
+MAX_BYTES = 2000
+EXCERPT_CHARS = 240
+MATCH_LIMIT = 5
+INDEX_LIMIT = 5
+STATE_TTL_SECONDS = 14 * 24 * 3600
+
+STOPWORDS = frozenset("""
+    the and for are but not you all can had her was one our out has have this that with
+    from they will would there their what about which when make like time just him know
+    take into year your some could them see other than then now look only come its over
+    think also back after use two how our work first well way even new want because any
+    these give day most are does did should why where who while here let need please
+    should still too very via yes yet near
+""".split())
 
 
-def search(db_path: str, project: str, query: str, limit: int = 8) -> list[dict]:
+def is_automated(prompt: str) -> bool:
+    head = prompt.lstrip()[:200]
+    return head.startswith("[SYSTEM NOTIFICATION") or "<task-notification" in head
+
+
+def build_fts_query(prompt: str) -> str:
+    """OR together up to 10 distinct, quoted, non-stopword terms.
+
+    Quoting keeps FTS5 operators (AND/OR/NOT/NEAR) in the prompt from being parsed.
+    Returns "" when no meaningful terms remain.
+    """
+    seen: list[str] = []
+    for word in re.findall(r"[a-zA-Z0-9_]{3,}", prompt.lower()):
+        if word not in STOPWORDS and word not in seen:
+            seen.append(word)
+    terms = seen[:10]
+    if not terms:
+        return ""
+    return " OR ".join(f'"{t}"' for t in terms)
+
+
+def search(db_path: str, project: str, query: str, limit: int = MATCH_LIMIT) -> list[dict]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
-        # Project-scoped FTS search
+        migrate(conn)
         rows = conn.execute("""
-            SELECT e.type, e.title, e.body, e.tags
+            SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
             FROM entries_fts
             JOIN entries e ON entries_fts.rowid = e.id
             JOIN projects p ON e.project_id = p.id
             WHERE entries_fts MATCH ?
               AND p.name = ?
-            ORDER BY rank
+              AND e.status = 'active'
+            ORDER BY bm25(entries_fts, 10.0, 1.0, 5.0)
             LIMIT ?
         """, (query, project, limit)).fetchall()
-
         return [dict(r) for r in rows]
     finally:
         conn.close()
 
 
-def get_project_entries(db_path: str, project: str, limit: int = 10) -> list[dict]:
+def get_project_entries(db_path: str, project: str, limit: int = INDEX_LIMIT) -> list[dict]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
+        migrate(conn)
         rows = conn.execute("""
-            SELECT e.type, e.title, e.body, e.tags
+            SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
             FROM entries e
             JOIN projects p ON e.project_id = p.id
-            WHERE p.name = ?
+            WHERE p.name = ? AND e.status = 'active'
             ORDER BY e.updated DESC
             LIMIT ?
         """, (project, limit)).fetchall()
@@ -46,11 +97,43 @@ def get_project_entries(db_path: str, project: str, limit: int = 10) -> list[dic
         conn.close()
 
 
-def build_fts_query(prompt: str) -> str:
-    # Strip punctuation, take first 10 meaningful words as FTS terms
-    import re
-    words = re.findall(r"[a-zA-Z0-9_]{3,}", prompt)[:10]
-    return " OR ".join(words) if words else ""
+def _seen(conn: sqlite3.Connection, session_id: str) -> dict[int, float]:
+    rows = conn.execute(
+        "SELECT entry_id, updated FROM inject_state WHERE session_id = ?", (session_id,)
+    ).fetchall()
+    return {r[0]: r[1] for r in rows}
+
+
+def _excerpt(body: str) -> str:
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip()][:2]
+    text = " ".join(lines)
+    if len(text) > EXCERPT_CHARS:
+        text = text[: EXCERPT_CHARS - 1].rstrip() + "…"
+    return text
+
+
+def format_entry(e: dict) -> str:
+    day = datetime.fromtimestamp(e["updated"]).strftime("%Y-%m-%d")
+    out = [f"[{e['type'].upper()}] {e['title']} (id {e['id']}, updated {day})"]
+    excerpt = _excerpt(e["body"] or "")
+    if excerpt:
+        out.append(excerpt)
+    return "\n".join(out)
+
+
+def render(project: str, entries: list[dict]) -> tuple[str, list[dict]]:
+    """Build the block, adding entries until MAX_BYTES. Returns (text, entries used)."""
+    header = f"<kb-context>\nProject: {project}\n\n"
+    footer = "Excerpts only — call kb_get_entry(id) for the full text.\n</kb-context>"
+    text = header
+    used: list[dict] = []
+    for e in entries:
+        chunk = format_entry(e) + "\n\n"
+        if used and len((text + chunk + footer).encode()) > MAX_BYTES:
+            break
+        text += chunk
+        used.append(e)
+    return text + footer, used
 
 
 def main() -> None:
@@ -58,34 +141,58 @@ def main() -> None:
         sys.exit(0)
 
     db_path, project, prompt = sys.argv[1], sys.argv[2], sys.argv[3]
+    session_id = sys.argv[4] if len(sys.argv) > 4 else ""
 
-    fts_query = build_fts_query(prompt)
-    entries: list[dict] = []
-
-    if fts_query:
-        entries = search(db_path, project, fts_query)
-
-    # Always include recent project entries if we have a project match
-    if not entries:
-        entries = get_project_entries(db_path, project)
-
-    if not entries:
+    if is_automated(prompt):
         sys.exit(0)
 
-    lines = ["<kb-context>"]
-    lines.append(f"Project: {project}")
-    lines.append("")
-    for e in entries:
-        lines.append(f"[{e['type'].upper()}] {e['title']}")
-        if e["body"]:
-            lines.append(e["body"])
-        if e["tags"]:
-            lines.append(f"tags: {e['tags']}")
-        lines.append("")
-    lines.append("</kb-context>")
+    fts_query = build_fts_query(prompt)
+    matches = search(db_path, project, fts_query) if fts_query else []
 
-    print("\n".join(lines))
+    conn = sqlite3.connect(db_path)
+    try:
+        migrate(conn)
+        seen: dict[int, float] = {}
+        first_in_session = False
+        if session_id:
+            seen = _seen(conn, session_id)
+            first_in_session = not seen
+
+        candidates = list(matches)
+        if first_in_session:
+            have = {e["id"] for e in candidates}
+            candidates += [e for e in get_project_entries(db_path, project) if e["id"] not in have]
+
+        fresh = [e for e in candidates if seen.get(e["id"]) != e["updated"]]
+        if not fresh:
+            sys.exit(0)
+
+        text, used = render(project, fresh)
+
+        if session_id:
+            now = time.time()
+            with conn:
+                conn.execute("DELETE FROM inject_state WHERE ts < ?", (now - STATE_TTL_SECONDS,))
+                conn.executemany(
+                    "INSERT OR REPLACE INTO inject_state (session_id, entry_id, updated, ts) VALUES (?,?,?,?)",
+                    [(session_id, e["id"], e["updated"], now) for e in used],
+                )
+    finally:
+        conn.close()
+
+    print(text)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception:
+        try:
+            LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with LOG_PATH.open("a") as f:
+                f.write(f"{datetime.now().isoformat()} inject_context failed\n{traceback.format_exc()}\n")
+        except OSError:
+            pass
+        sys.exit(0)

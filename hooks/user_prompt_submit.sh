@@ -14,12 +14,14 @@ INJECT="$REPO_DIR/hooks/inject_context.py"
 
 # Read the prompt from stdin (Claude Code passes it as JSON on stdin)
 PAYLOAD="$(cat)"
+LOG="$HOME/.claude/knowledgebase-hook.log"
 PROMPT="$(echo "$PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('prompt',''))" 2>/dev/null || true)"
+SESSION_ID="$(echo "$PAYLOAD" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('session_id',''))" 2>/dev/null || true)"
 
 [[ -z "$PROMPT" ]] && exit 0
 
-# Detect project name from cwd (use the directory name as the project key)
-PROJECT="$(basename "$PWD")"
+# Project key comes from the git common dir so worktrees map to their parent repo
+PROJECT="$("$VENV/bin/python" "$REPO_DIR/hooks/kb_project.py" "$PWD" 2>>"$LOG" || basename "$PWD")"
 
-# Run the injector — its stdout becomes the injected context block
-"$VENV/bin/python" "$INJECT" "$DB" "$PROJECT" "$PROMPT" 2>/dev/null || true
+# Run the injector — its stdout becomes the injected context block; failures are logged
+"$VENV/bin/python" "$INJECT" "$DB" "$PROJECT" "$PROMPT" "$SESSION_ID" 2>>"$LOG" || true
