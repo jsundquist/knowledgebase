@@ -46,7 +46,7 @@ optionally saving new entries → session ends → Stop hook nudges a final capt
 | `kb_search` | Full-text search across entries, optionally scoped by project/type |
 | `kb_get_project` | Fetch all entries for a project, grouped by type |
 | `kb_list_projects` | List known projects with entry counts and last-updated |
-| `kb_update_entry` | Partially update an existing entry; set `status` (`active`/`superseded`/`stale`) and `superseded_by` to retire outdated entries |
+| `kb_update_entry` | Partially update an existing entry; set `status` (`active`/`superseded`/`stale`) and `superseded_by` to retire outdated entries; setting `status=active` clears `superseded_by`, and `superseded_by=0` clears it explicitly |
 | `kb_delete_entry` | Delete an entry by id |
 | `kb_get_entry` | Fetch a single entry by id |
 
