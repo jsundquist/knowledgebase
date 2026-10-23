@@ -141,6 +141,15 @@ def format_entry(e: dict) -> str:
     return "\n".join(out)
 
 
+def _truncate_to_bytes(text: str, limit: int) -> str:
+    """Cut text to at most `limit` UTF-8 bytes, ending with an ellipsis."""
+    if len(text.encode()) <= limit:
+        return text
+    ellipsis = "…"
+    room = max(limit - len(ellipsis.encode()), 0)
+    return text.encode()[:room].decode(errors="ignore").rstrip() + ellipsis
+
+
 def render_block(project: str, entries: list[dict]) -> tuple[str, list[dict]]:
     """Build the block, adding entries until MAX_BYTES. Returns (text, entries used)."""
     header = f"<kb-context>\nProject: {project}\n\n"
@@ -149,8 +158,10 @@ def render_block(project: str, entries: list[dict]) -> tuple[str, list[dict]]:
     used: list[dict] = []
     for e in entries:
         chunk = format_entry(e) + "\n\n"
-        if used and len((text + chunk + footer).encode()) > MAX_BYTES:
-            break
+        if len((text + chunk + footer).encode()) > MAX_BYTES - 1:
+            if used:
+                break
+            chunk = _truncate_to_bytes(chunk.rstrip("\n"), MAX_BYTES - 1 - len((text + footer).encode()) - 2) + "\n\n"
         text += chunk
         used.append(e)
     return text + footer, used

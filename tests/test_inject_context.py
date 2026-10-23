@@ -186,3 +186,26 @@ def test_automated_prompt_skipped(populated_db, capsys):
     assert capsys.readouterr().out == ""
     _run(populated_db, "my-app", "<task-notification>auth done</task-notification>", "s1")
     assert capsys.readouterr().out == ""
+
+
+def test_single_oversized_entry_is_truncated_to_cap(tmp_db, capsys):
+    conn = get_conn()
+    with conn:
+        pid = get_or_create_project(conn, "huge")
+        conn.execute(
+            "INSERT INTO entries (project_id, type, title, body, tags, created, updated) VALUES (?,?,?,?,?,?,?)",
+            (pid, "note", "widget " + "T" * 5000, "widget body", "", 1.0, 1.0),
+        )
+    conn.close()
+    _run(tmp_db, "huge", "tell me about widget", "s1")
+    out = capsys.readouterr().out
+    assert "widget" in out
+    assert out.rstrip("\n").endswith("</kb-context>")
+    assert len(out.encode()) <= inject_context.MAX_BYTES
+
+
+def test_no_session_id_with_match_excludes_recent_index(populated_db, capsys):
+    _run(populated_db, "my-app", "how does auth work")
+    out = capsys.readouterr().out
+    assert "Auth uses JWT" in out
+    assert "Use PostgreSQL" not in out
