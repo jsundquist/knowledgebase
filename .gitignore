@@ -1,0 +1,53 @@
+# Secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa*
+id_ed25519*
+*.secret
+*.secrets
+secrets.*
+credentials*
+.netrc
+.npmrc
+.pypirc
+
+# Knowledge data (private session content)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.log
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+
+# OS and editor
+.DS_Store
+._*
+.idea/
+.vscode/
+*.swp
