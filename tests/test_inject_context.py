@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 import db as db_module
-from db import get_conn, get_or_create_project, init_db
+from db import get_conn, get_or_create_project
 
 # Import the injector from hooks/
 sys.path.insert(0, str(Path(__file__).parent.parent / "hooks"))
@@ -21,14 +21,31 @@ def populated_db(tmp_db, monkeypatch):
     with conn:
         pid = get_or_create_project(conn, "my-app")
         import time
+
         now = time.time()
         conn.execute(
             "INSERT INTO entries (project_id, type, title, body, tags, created, updated) VALUES (?,?,?,?,?,?,?)",
-            (pid, "finding", "Auth uses JWT", "RS256 signed tokens with 1h expiry", "auth,jwt", now, now),
+            (
+                pid,
+                "finding",
+                "Auth uses JWT",
+                "RS256 signed tokens with 1h expiry",
+                "auth,jwt",
+                now,
+                now,
+            ),
         )
         conn.execute(
             "INSERT INTO entries (project_id, type, title, body, tags, created, updated) VALUES (?,?,?,?,?,?,?)",
-            (pid, "decision", "Use PostgreSQL", "Chosen for JSONB support", "database,postgres", now, now),
+            (
+                pid,
+                "decision",
+                "Use PostgreSQL",
+                "Chosen for JSONB support",
+                "database,postgres",
+                now,
+                now,
+            ),
         )
     conn.close()
     return tmp_db
@@ -171,7 +188,9 @@ def test_updated_entry_is_reinjected(populated_db, capsys):
     capsys.readouterr()
     conn = get_conn()
     with conn:
-        conn.execute("UPDATE entries SET body='changed', updated=updated+10 WHERE title='Auth uses JWT'")
+        conn.execute(
+            "UPDATE entries SET body='changed', updated=updated+10 WHERE title='Auth uses JWT'"
+        )
     conn.close()
     _run(populated_db, "my-app", "how does auth work", "s1")
     out = capsys.readouterr().out
@@ -256,7 +275,9 @@ def test_render_block_oversized_tags_stay_within_cap():
 
 
 def test_render_block_long_project_name_stays_within_cap():
-    text, used = inject_context.render_block("é" * 5000, [_entry(title="T" * 5000, body="x" * 5000)])
+    text, used = inject_context.render_block(
+        "é" * 5000, [_entry(title="T" * 5000, body="x" * 5000)]
+    )
     assert len((text + "\n").encode()) <= inject_context.MAX_BYTES
     assert text.rstrip("\n").endswith("</kb-context>")
     assert len(used) == 1

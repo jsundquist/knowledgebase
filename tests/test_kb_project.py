@@ -30,7 +30,18 @@ def test_worktree_resolves_to_parent_repo(tmp_path):
     repo = tmp_path / "my-repo"
     repo.mkdir()
     _git(repo, "init", "-q")
-    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init")
+    _git(
+        repo,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "init",
+    )
     wt = repo / ".claude" / "worktrees" / "agent-abc"
     _git(repo, "worktree", "add", "-q", str(wt))
     assert resolve_project(str(wt)) == "my-repo"

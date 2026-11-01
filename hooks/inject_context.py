@@ -7,6 +7,7 @@ ids, and only includes active entries. Entries already injected in this session
 (and unchanged since) are skipped, so a project injects once per session and then
 only what newly matches.
 """
+
 from __future__ import annotations
 
 import re
@@ -14,14 +15,15 @@ import sqlite3
 import sys
 import time
 import traceback
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from db import migrate  # noqa: E402
 from hook_log import log  # noqa: E402
+
+from db import migrate  # noqa: E402
 
 MAX_BYTES = 2000
 PROJECT_MAX_BYTES = 200
@@ -30,14 +32,16 @@ MATCH_LIMIT = 5
 INDEX_LIMIT = 5
 STATE_TTL_SECONDS = 14 * 24 * 3600
 
-STOPWORDS = frozenset("""
+STOPWORDS = frozenset(
+    """
     the and for are but not you all can had her was one our out has have this that with
     from they will would there their what about which when make like time just him know
     take into year your some could them see other than then now look only come its over
     think also back after use two how our work first well way even new want because any
     these give day most are does did should why where who while here let need please
     should still too very via yes yet near
-""".split())
+""".split()
+)
 
 
 @contextmanager
@@ -73,8 +77,11 @@ def build_fts_query(prompt: str) -> str:
     return " OR ".join(f'"{t}"' for t in terms)
 
 
-def search(conn: sqlite3.Connection, project: str, query: str, limit: int = MATCH_LIMIT) -> list[dict]:
-    rows = conn.execute("""
+def search(
+    conn: sqlite3.Connection, project: str, query: str, limit: int = MATCH_LIMIT
+) -> list[dict]:
+    rows = conn.execute(
+        """
         SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
         FROM entries_fts
         JOIN entries e ON entries_fts.rowid = e.id
@@ -84,23 +91,31 @@ def search(conn: sqlite3.Connection, project: str, query: str, limit: int = MATC
           AND e.status = 'active'
         ORDER BY bm25(entries_fts, 10.0, 1.0, 5.0)
         LIMIT ?
-    """, (query, project, limit)).fetchall()
+    """,
+        (query, project, limit),
+    ).fetchall()
     return [dict(r) for r in rows]
 
 
-def get_project_entries(conn: sqlite3.Connection, project: str, limit: int = INDEX_LIMIT) -> list[dict]:
-    rows = conn.execute("""
+def get_project_entries(
+    conn: sqlite3.Connection, project: str, limit: int = INDEX_LIMIT
+) -> list[dict]:
+    rows = conn.execute(
+        """
         SELECT e.id, e.type, e.title, e.body, e.tags, e.updated
         FROM entries e
         JOIN projects p ON e.project_id = p.id
         WHERE p.name = ? AND e.status = 'active'
         ORDER BY e.updated DESC
         LIMIT ?
-    """, (project, limit)).fetchall()
+    """,
+        (project, limit),
+    ).fetchall()
     return [dict(r) for r in rows]
 
 
 # --- Session state (inject_state table) ------------------------------------
+
 
 def load_seen_entries(conn: sqlite3.Connection, session_id: str) -> dict[int, float]:
     """Map entry id -> `updated` stamp for entries already injected this session."""
@@ -122,6 +137,7 @@ def record_injected(conn: sqlite3.Connection, session_id: str, entries: list[dic
 
 
 # --- Rendering ---------------------------------------------------------------
+
 
 def _excerpt(body: str) -> str:
     lines = [ln.strip() for ln in body.splitlines() if ln.strip()][:2]

@@ -1,10 +1,10 @@
 """Tests for knowledgebase MCP tools."""
 
-import db as db_module
 import pytest
-from db import get_conn, get_or_create_project
-from tools import register
 from mcp.server.fastmcp import FastMCP
+
+import db as db_module
+from tools import register
 
 
 @pytest.fixture()
@@ -24,9 +24,13 @@ def mcp_tools(tmp_db, monkeypatch):
 # kb_add_entry
 # ---------------------------------------------------------------------------
 
+
 def test_add_entry_basic(mcp_tools):
     result = mcp_tools["kb_add_entry"](
-        project="my-project", title="Auth uses JWT", body="JWTs are signed with RS256.", type="finding"
+        project="my-project",
+        title="Auth uses JWT",
+        body="JWTs are signed with RS256.",
+        type="finding",
     )
     assert result["status"] == "added"
     assert "id" in result
@@ -44,14 +48,25 @@ def test_add_entry_invalid_type(mcp_tools):
 
 
 def test_add_entry_all_types(mcp_tools):
-    for entry_type in ("idea", "finding", "understanding", "decision", "context", "question", "note"):
-        result = mcp_tools["kb_add_entry"](project="p", title=f"title-{entry_type}", body="b", type=entry_type)
+    for entry_type in (
+        "idea",
+        "finding",
+        "understanding",
+        "decision",
+        "context",
+        "question",
+        "note",
+    ):
+        result = mcp_tools["kb_add_entry"](
+            project="p", title=f"title-{entry_type}", body="b", type=entry_type
+        )
         assert result["status"] == "added", f"failed for type={entry_type}"
 
 
 # ---------------------------------------------------------------------------
 # kb_get_entry
 # ---------------------------------------------------------------------------
+
 
 def test_get_entry_roundtrip(mcp_tools):
     add = mcp_tools["kb_add_entry"](project="proj", title="My Title", body="My Body", tags="a,b")
@@ -70,6 +85,7 @@ def test_get_entry_not_found(mcp_tools):
 # ---------------------------------------------------------------------------
 # kb_update_entry
 # ---------------------------------------------------------------------------
+
 
 def test_update_entry_title(mcp_tools):
     add = mcp_tools["kb_add_entry"](project="p", title="Old Title", body="body")
@@ -101,6 +117,7 @@ def test_update_entry_not_found(mcp_tools):
 # kb_delete_entry
 # ---------------------------------------------------------------------------
 
+
 def test_delete_entry(mcp_tools):
     add = mcp_tools["kb_add_entry"](project="p", title="to delete", body="b")
     result = mcp_tools["kb_delete_entry"](id=add["id"])
@@ -116,6 +133,7 @@ def test_delete_entry_not_found(mcp_tools):
 # ---------------------------------------------------------------------------
 # kb_list_projects
 # ---------------------------------------------------------------------------
+
 
 def test_list_projects_empty(mcp_tools):
     assert mcp_tools["kb_list_projects"]() == []
@@ -140,6 +158,7 @@ def test_list_projects_entry_count(mcp_tools):
 # ---------------------------------------------------------------------------
 # kb_get_project
 # ---------------------------------------------------------------------------
+
 
 def test_get_project_not_found(mcp_tools):
     result = mcp_tools["kb_get_project"](project="nonexistent")
@@ -168,6 +187,7 @@ def test_get_project_type_filter(mcp_tools):
 # kb_search
 # ---------------------------------------------------------------------------
 
+
 def test_search_finds_by_title(mcp_tools):
     mcp_tools["kb_add_entry"](project="p", title="database schema design", body="uses postgres")
     results = mcp_tools["kb_search"](query="database")
@@ -181,7 +201,9 @@ def test_search_finds_by_body(mcp_tools):
 
 
 def test_search_finds_by_tags(mcp_tools):
-    mcp_tools["kb_add_entry"](project="p", title="some title", body="some body", tags="security,oauth")
+    mcp_tools["kb_add_entry"](
+        project="p", title="some title", body="some body", tags="security,oauth"
+    )
     results = mcp_tools["kb_search"](query="oauth")
     assert len(results) > 0
 
@@ -209,6 +231,7 @@ def test_search_type_filter(mcp_tools):
 # ---------------------------------------------------------------------------
 # entry status / supersession
 # ---------------------------------------------------------------------------
+
 
 def test_new_entry_is_active(mcp_tools):
     eid = mcp_tools["kb_add_entry"](project="p", title="t", body="b")["id"]

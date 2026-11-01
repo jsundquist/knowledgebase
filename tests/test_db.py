@@ -8,13 +8,17 @@ from db import get_conn, get_or_create_project, init_db
 
 def test_init_creates_tables(tmp_db):
     conn = sqlite3.connect(tmp_db)
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    tables = {
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
     assert {"projects", "entries"}.issubset(tables)
 
 
 def test_init_creates_fts_table(tmp_db):
     conn = sqlite3.connect(tmp_db)
-    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    tables = {
+        r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+    }
     assert "entries_fts" in tables
 
 

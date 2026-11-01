@@ -103,6 +103,7 @@ def get_or_create_project(conn: sqlite3.Connection, name: str) -> int:
         return row["id"]
     now = time.time()
     cur = conn.execute("INSERT INTO projects (name, created) VALUES (?, ?)", (name, now))
+    assert cur.lastrowid is not None
     return cur.lastrowid
 
 
