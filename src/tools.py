@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Literal, Optional
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 
@@ -37,7 +37,9 @@ def register(mcp: FastMCP) -> None:
             tags:    Comma-separated keywords (e.g. "auth,security,database").
         """
         if type not in ENTRY_TYPES:
-            return {"error": f"Invalid type '{type}'. Must be one of: {', '.join(sorted(ENTRY_TYPES))}"}
+            return {
+                "error": f"Invalid type '{type}'. Must be one of: {', '.join(sorted(ENTRY_TYPES))}"
+            }
 
         now = time.time()
         conn = get_conn()
@@ -49,15 +51,21 @@ def register(mcp: FastMCP) -> None:
                     (project_id, type, title, body, tags.strip(), now, now),
                 )
                 entry_id = cur.lastrowid
-            return {"id": entry_id, "project": project, "type": type, "title": title, "status": "added"}
+            return {
+                "id": entry_id,
+                "project": project,
+                "type": type,
+                "title": title,
+                "status": "added",
+            }
         finally:
             conn.close()
 
     @mcp.tool()
     def kb_search(
         query: str,
-        project: Optional[str] = None,
-        type: Optional[str] = None,
+        project: str | None = None,
+        type: str | None = None,
         limit: int = 20,
     ) -> list[dict]:
         """Search knowledge entries using full-text search.
@@ -92,7 +100,8 @@ def register(mcp: FastMCP) -> None:
 
             params.append(limit)
 
-            rows = conn.execute(f"""
+            rows = conn.execute(
+                f"""
                 SELECT e.id, p.name AS project, e.type, e.title, e.body, e.tags,
                        e.status, e.superseded_by, e.created, e.updated,
                        rank
@@ -104,14 +113,16 @@ def register(mcp: FastMCP) -> None:
                 {type_filter}
                 ORDER BY rank
                 LIMIT ?
-            """, params).fetchall()
+            """,
+                params,
+            ).fetchall()
 
             return [dict(r) for r in rows]
         finally:
             conn.close()
 
     @mcp.tool()
-    def kb_get_project(project: str, type: Optional[str] = None) -> dict:
+    def kb_get_project(project: str, type: str | None = None) -> dict:
         """Get all knowledge entries for a project.
 
         Returns a summary of the project and all its entries, grouped by type.
@@ -123,7 +134,9 @@ def register(mcp: FastMCP) -> None:
         """
         conn = get_conn()
         try:
-            proj_row = conn.execute("SELECT id, created FROM projects WHERE name = ?", (project,)).fetchone()
+            proj_row = conn.execute(
+                "SELECT id, created FROM projects WHERE name = ?", (project,)
+            ).fetchone()
             if not proj_row:
                 return {"error": f"Project '{project}' not found"}
 
@@ -132,14 +145,17 @@ def register(mcp: FastMCP) -> None:
             if type:
                 params.append(type)
 
-            rows = conn.execute(f"""
+            rows = conn.execute(
+                f"""
                 SELECT e.id, e.type, e.title, e.body, e.tags, e.status, e.superseded_by,
                        e.created, e.updated
                 FROM entries e
                 WHERE e.project_id = ?
                 {type_filter}
                 ORDER BY e.type, e.created
-            """, params).fetchall()
+            """,
+                params,
+            ).fetchall()
 
             by_type: dict[str, list] = {}
             for r in rows:
@@ -178,12 +194,12 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def kb_update_entry(
         id: int,
-        title: Optional[str] = None,
-        body: Optional[str] = None,
-        tags: Optional[str] = None,
-        type: Optional[str] = None,
-        status: Optional[str] = None,
-        superseded_by: Optional[int] = None,
+        title: str | None = None,
+        body: str | None = None,
+        tags: str | None = None,
+        type: str | None = None,
+        status: str | None = None,
+        superseded_by: int | None = None,
     ) -> dict:
         """Update an existing knowledge entry.
 
@@ -204,12 +220,18 @@ def register(mcp: FastMCP) -> None:
             superseded_by: ID of the entry that replaces this one; 0 clears the link (optional).
         """
         if type and type not in ENTRY_TYPES:
-            return {"error": f"Invalid type '{type}'. Must be one of: {', '.join(sorted(ENTRY_TYPES))}"}
+            return {
+                "error": f"Invalid type '{type}'. Must be one of: {', '.join(sorted(ENTRY_TYPES))}"
+            }
         if status and status not in ENTRY_STATUSES:
-            return {"error": f"Invalid status '{status}'. Must be one of: {', '.join(sorted(ENTRY_STATUSES))}"}
+            return {
+                "error": f"Invalid status '{status}'. Must be one of: {', '.join(sorted(ENTRY_STATUSES))}"
+            }
 
         if status == "active" and superseded_by:
-            return {"error": "status='active' clears superseded_by; do not pass a non-zero superseded_by with it"}
+            return {
+                "error": "status='active' clears superseded_by; do not pass a non-zero superseded_by with it"
+            }
 
         conn = get_conn()
         try:
@@ -232,7 +254,16 @@ def register(mcp: FastMCP) -> None:
             with conn:
                 conn.execute(
                     "UPDATE entries SET title=?, body=?, tags=?, type=?, status=?, superseded_by=?, updated=? WHERE id=?",
-                    (new_title, new_body, new_tags, new_type, new_status, new_superseded_by, time.time(), id),
+                    (
+                        new_title,
+                        new_body,
+                        new_tags,
+                        new_type,
+                        new_status,
+                        new_superseded_by,
+                        time.time(),
+                        id,
+                    ),
                 )
             return {"id": id, "status": "updated"}
         finally:
@@ -265,13 +296,16 @@ def register(mcp: FastMCP) -> None:
         """
         conn = get_conn()
         try:
-            row = conn.execute("""
+            row = conn.execute(
+                """
                 SELECT e.id, p.name AS project, e.type, e.title, e.body, e.tags,
                        e.status, e.superseded_by, e.created, e.updated
                 FROM entries e
                 JOIN projects p ON e.project_id = p.id
                 WHERE e.id = ?
-            """, (id,)).fetchone()
+            """,
+                (id,),
+            ).fetchone()
             if not row:
                 return {"error": f"Entry {id} not found"}
             return dict(row)

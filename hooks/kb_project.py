@@ -5,6 +5,7 @@ Uses the git common dir so a linked worktree (e.g. .claude/worktrees/agent-<id>)
 maps to the same project as the repo it was created from. Falls back to the
 directory name outside a git repo.
 """
+
 from __future__ import annotations
 
 import os

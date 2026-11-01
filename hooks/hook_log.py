@@ -4,6 +4,7 @@ Never raises: logging must not break a hook. Also usable from shell:
     python3 hook_log.py <source> <message>
     python3 hook_log.py --path          # print the log path
 """
+
 from __future__ import annotations
 
 import sys

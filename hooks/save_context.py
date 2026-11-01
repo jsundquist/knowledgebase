@@ -9,6 +9,7 @@ Summarization backend is pluggable:
   2. $ANTHROPIC_API_KEY, if set — a direct HTTPS call to the Anthropic Messages API.
   3. Otherwise: skip. No summarizer configured, nothing is saved.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,9 +36,9 @@ SUMMARY_INSTRUCTIONS = (
     "knowledgebase entry. Read the transcript delta below and respond with ONLY a JSON object "
     '(no markdown fences, no commentary) of the shape {"title": str, "body": str, "tags": str, '
     '"type": str}. "type" must be one of: idea, finding, understanding, decision, context, '
-    "question, note. \"tags\" is a comma-separated string. Keep \"body\" focused on what a "
+    'question, note. "tags" is a comma-separated string. Keep "body" focused on what a '
     "future session would need to know: decisions made, findings, open questions, gotchas. If "
-    "there is nothing worth remembering, respond with {\"skip\": true} instead."
+    'there is nothing worth remembering, respond with {"skip": true} instead.'
 )
 
 
@@ -132,13 +133,13 @@ def summarize_via_cmd(text: str, cmd: str) -> dict | None:
 
 def summarize_via_anthropic(text: str, api_key: str) -> dict | None:
     model = os.environ.get("KB_SUMMARIZER_MODEL", DEFAULT_MODEL)
-    payload = json.dumps({
-        "model": model,
-        "max_tokens": 1024,
-        "messages": [
-            {"role": "user", "content": f"{SUMMARY_INSTRUCTIONS}\n\n---\n\n{text}"}
-        ],
-    }).encode("utf-8")
+    payload = json.dumps(
+        {
+            "model": model,
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": f"{SUMMARY_INSTRUCTIONS}\n\n---\n\n{text}"}],
+        }
+    ).encode("utf-8")
 
     req = urllib.request.Request(
         "https://api.anthropic.com/v1/messages",
@@ -157,7 +158,9 @@ def summarize_via_anthropic(text: str, api_key: str) -> dict | None:
         return None
 
     blocks = body.get("content", [])
-    text_out = "\n".join(b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text")
+    text_out = "\n".join(
+        b.get("text", "") for b in blocks if isinstance(b, dict) and b.get("type") == "text"
+    )
     return _parse_json_object(text_out)
 
 
@@ -205,8 +208,17 @@ def save_entry(conn: sqlite3.Connection, project: str, entry: dict, source_tag: 
     cur = conn.execute(
         "INSERT INTO entries (project_id, type, title, body, tags, created, updated) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (project_id, entry_type, entry.get("title", "Session summary"), entry.get("body", ""), tags, now, now),
+        (
+            project_id,
+            entry_type,
+            entry.get("title", "Session summary"),
+            entry.get("body", ""),
+            tags,
+            now,
+            now,
+        ),
     )
+    assert cur.lastrowid is not None
     return cur.lastrowid
 
 
