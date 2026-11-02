@@ -135,3 +135,13 @@ Runs the test suite in `tests/` (db, tools, inject_context, save_context, kb_pro
 
 This project is installed by cloning the repo and running `install.sh`; there is no published
 package or container image, so signing, provenance, and a release SBOM don't apply.
+
+### Pre-commit secret scan
+
+Staged changes are scanned with [gitleaks](https://github.com/gitleaks/gitleaks) via
+[lefthook](https://github.com/evilmartians/lefthook). One-time setup per clone:
+
+```
+brew install lefthook gitleaks
+lefthook install
+```
