@@ -3,12 +3,13 @@ name: SBOM
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions: {}
 
 concurrency:
   group: sbom-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   sbom:
