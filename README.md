@@ -132,3 +132,6 @@ uv run pytest
 ```
 
 Runs the test suite in `tests/` (db, tools, inject_context, save_context, kb_project, hook_log).
+
+This project is installed by cloning the repo and running `install.sh`; there is no published
+package or container image, so signing, provenance, and a release SBOM don't apply.
