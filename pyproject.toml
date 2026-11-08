@@ -16,7 +16,7 @@ asyncio_mode = "auto"
 [dependency-groups]
 dev = [
     "pytest>=8.0",
-    "pytest-asyncio>=0.24",
+    "pytest-asyncio>=1.4.1.post1",
     "ruff>=0.8",
     "pyright>=1.1.390",
     "pip-audit>=2.7",
